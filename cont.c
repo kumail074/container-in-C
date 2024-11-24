@@ -131,7 +131,7 @@ int mounts(child_config *config) {
 
     fprintf(stderr, "=> unmounting &s...", old_root);
     if(chdir("/")) {
-        forintf(stderr, "chdir failed: %m\n");
+        fprintf(stderr, "chdir failed: %m\n");
         return -1;
     }
     if(umount2(old_root, MNT_DETACH)) {
@@ -155,10 +155,10 @@ int syscalls() {
     scmp_filter_ctx ctx = NULL;
     fprintf(stderr, "=> filtering syscalls...");
     if(!(ctx = seccomp_init(SCMP_ACT_ALLOW))
-            || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(chmod), 1, SCMP_A1(ACMP_CMP_MASKED_EQ, S_ISUID, S_ISUID)) 
+            || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(chmod), 1, SCMP_A1(SCMP_CMP_MASKED_EQ, S_ISUID, S_ISUID)) 
             || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(chmod), 1, SCMP_A1(SCMP_CMP_MASKED_EQ, S_ISGID, S_ISGID))
             || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(fchmod), 1, SCMP_A1(SCMP_CMP_MASKED_EQ, S_ISUID, S_ISUID))
-            || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(fchmod), 1, SCMP_A1(SCMP_CMP_MASKED_EQ, S_ISGID, IS_GID))
+            || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(fchmod), 1, SCMP_A1(SCMP_CMP_MASKED_EQ, S_ISGID, S_ISGID))
             || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(fchmodat), 1, SCMP_A2(SCMP_CMP_MASKED_EQ, S_ISUID, S_ISUID))
             || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(fchmodat), 1, SCMP_A2(SCMP_SMP_MASKED_EQ, S_ISGID, S_ISGID))
             || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(unshare), 1, SCMP_A0(SCMP_CMP_MASKED_EQ, CLONE_NEWUSER, CLONE_NEWUSER))
@@ -176,7 +176,7 @@ int syscalls() {
             || seccomp_rule_add(ctx, SCMP_FAIL, SCMP_SYS(perf_event_open), 0)
             || seccomp_attr_set(ctx, SCMP_FLTATR_CTL_NNP, 0)
             || seccomp_load(ctx)) {
-                if(ctx) seccomp_release(ctx)l
+                if(ctx) seccomp_release(ctx);
                     fprintf(stderr, "failed: %m\n");
                 return -1;
             }
@@ -260,7 +260,7 @@ int resources(struct child_config *config) {
     fprintf(stderr, "=> setting cgroups...");
     for(struct cgrp_control **cgrp = cgrps; *cgrp; cgrp++) {
         char dir[PATH_MAX] = {0};
-        fprintf(stderr, "%s...", (*cgrp)->control)l
+        fprintf(stderr, "%s...", (*cgrp)->control);
             if(snprintf(dir, sizeof(dir), "/sys/fs/cgroup/%s/%s", (*cgrp)->control, config->hostname) == -1) {
                 return -1;
             }
@@ -297,6 +297,36 @@ int resources(struct child_config *config) {
     return 0;
 }
 
+int free_resources(struct child_config *config) {
+    fprintf(stderr, "=> cleaning cgroups...");
+    for(struct cgrp_control **cgrp = cgrps; *cgrp; cgrp++) {
+        char dir[PATH_MAX] = {0};
+        char task[PATH_MAX] = {0};
+        int task_fd = 0;
+        if(snprintf(dir, sizeof(dir), "/sys/fs/cgroup/%s/%s", (*cgrp)->control, config->hostname) == -1 || snprintf(task, sizeof(task), "/sys/fs/cgroup/%s/tasks", (*cgrp)->control) == -1) {
+            fprintf(stderr, "snprintf failed: %m\n");
+            return -1;
+        }
+        if((task_fd = open(task, O_WRONLY)) == -1){
+           fprintf(stderr, "opening %s failed: %m\n", task);
+          return -1;
+        }
+       if(write(task_fd, "0", 2) == -1) {
+          fprintf(stderr, "writing to %s failed: %m\n", task);
+         close(task_fd);
+        return -1;
+       }
+      close(task_fd);
+       if(rmdir(dir)) {
+          fprintf(stderr, "rmdir %s failed: %m", dir);
+          return -1;
+       }
+    }
+    fprintf(stderr, "done\n");
+    return 0;
+}
+
+    
 
 
 
